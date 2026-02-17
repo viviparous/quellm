@@ -1,7 +1,7 @@
 # QUELLM (Quel LLM)
 An easy-to-use Perl client for use with [Ollama server](https://ollama.com).
 
-quellm is a client for querying an Ollama server in your local network. I coded quellm so I could use _offline_ LLMs for querying. 
+quellm (rhymes with "tell 'em") is a client for querying an Ollama server in your local network. I coded quellm so I could use _offline_ LLMs for querying. 
 
 I wanted an Ollama client that is easy to use. See the Usage section below for a summary of how to use quellm to query 1 LLM, a selection of LLMs, or *all* the installed LLMs. 
 
