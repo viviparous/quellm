@@ -33,7 +33,7 @@ $Data::Dumper::Terse=1;
 my %dLogic=(null => "_nil_" , true => 1 , false => 0 , tint => "int" , tcsvint => "csvint" );
 my %dAPI=( tags => "/api/tags" , generate => "/api/generate" , version => "/api/version" , pull => "/api/pull" , delete => "/api/delete" );
 my %dAppState=( bHasValidEndpoint => $dLogic{false} , apiserver => $dLogic{null} , parpath => $Bin , bconfig_found => $dLogic{false}, 
-  bconfig_useabsdir => $dLogic{true}  , tstt => time , tend => -1
+  bconfig_useabsdir => $dLogic{false}  , tstt => time , tend => -1
 );
 my %dAppStrs=( bAppendQueryRules => $dLogic{true} , 
   queryRules => "(Be concise. Include a complete list of authoritative references.)" 
@@ -187,8 +187,11 @@ sub showHelp {
 }
 
 
-
 ##############################################
+##############
+############## I N I T ##############
+##############
+
 
 mksepc($dHues{clrgr});
 say basename($0) . "\n$0 running...";
@@ -201,8 +204,9 @@ $dAppState{ua}->default_header('Content-Type' => 'application/json');
 
 my $dataFileNym=basename($0)."_data.cfgtxt";
 
-if( -e $dAppState{parpath}."/$dataFileNym"){ $dAppState{bconfig_found}=$dLogic{true}; $dAppState{bconfig_useabsdir}=$dLogic{true};}
-elsif( -e $dataFileNym ){ $dAppState{bconfig_found}=$dLogic{true}; $dAppState{bconfig_useabsdir}=$dLogic{false}; }
+if( -e $dataFileNym ){ $dAppState{bconfig_found}=$dLogic{true}; $dAppState{bconfig_useabsdir}=$dLogic{false}; }
+elsif( -e $dAppState{parpath}."/$dataFileNym"){ $dAppState{bconfig_found}=$dLogic{true}; $dAppState{bconfig_useabsdir}=$dLogic{true};}
+
 
 say "Config file name = \"$dataFileNym\""; 
 say "Property bconfig_found = " . $dAppState{bconfig_found};
@@ -218,9 +222,11 @@ if( $dAppState{bconfig_found} ){
 
    my $hrfcfg = $oConf->read($pathConfFile);
    $dAppState{apiserver}=$hrfcfg->{Server}->{URL};
+   $dAppState{bAppendQueryRules} = $hrfcfg->{Logic}->{bAppendQueryRules}; 
+   
 
 }
-elsif( ! $dAppState{bconfig_found} ){ 
+elsif( ! $dAppState{bconfig_found} ){ ### create a config file 
  say "Create a configuration...";
  my $EPtest=getkbinput("Enter an API endpoint URL to use (e.g. http://xxx.xxx.xxx.xxx.:portnum) :");
 
@@ -233,6 +239,8 @@ elsif( ! $dAppState{bconfig_found} ){
 
 
    $oConf->{Server} = { "URL" => $EPtest }; 
+   $oConf->{Logic} = { "bAppendQueryRules" => 1 }; 
+   
    $oConf->write($dataFileNym); 
    $dAppState{apiserver}=$EPtest;   
     
