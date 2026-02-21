@@ -15,6 +15,7 @@ use warnings;
 use feature 'say';
 use JSON::PP;
 use LWP::UserAgent; 
+use LWP::Protocol::https;
 use Data::Dumper;
 use Term::ANSIColor qw(:constants);
 use FindBin qw($Bin); # $Bin yields location of current programme
@@ -261,18 +262,25 @@ pullCurrentList();
 mksepc( $dHues{clryw} );
 
 if(scalar(@ARGV)==0){ showHelp(); exit(0); }
-elsif(lc($ARGV[0]) eq "library" ){
+elsif(lc($ARGV[0]) eq "library" ){ ##################################################### LIBRARY
  say "Reading the latest Ollama library page...";
  #curl -s https://ollama.com/library | grep -oP 'href="/library/\K[^"]+' | sort
- my $rv = $dAppState{ua}->get("https://ollama.com/library");
- my $ohLibrary=mkOrderedHash();
+ my $rv = $dAppState{ua}->get("https://ollama.com/library?sort=newest"); ### calling ollama with sort parameter
+ my $ohLibrary=mkOrderedHash(); 
+ my %dLUTbIsCloud=();
+
+ if ( ! $rv->is_success) { 
+  mksepc($dHues{clrrd}); say $rv->status_line; say $rv->{content}; doarfErrExit( [__LINE__, "library request failed" ] ); 
+ }
+
  my $resp=$rv->content();
  # >cloud</span> ###<<<--- Indicates a cloud model (requires Internet)
  my %dlocModelwords=();
  while ( $resp =~ m{a href=\"\/library\/(\S+)\"}g) {
   my $mnym=$1; chomp($mnym);
   $ohLibrary->{$mnym}=$-[0] ; #say "library model $1";
-  $dlocModelwords{$-[0]}=$mnym;  
+  $dlocModelwords{$-[0]}=$mnym;
+  $dLUTbIsCloud{$mnym}=$dLogic{false};  
  }
  while ( $resp =~ m{>cloud<\/span>}g) {  
   $dlocModelwords{$-[0]}="cloud";  
@@ -281,7 +289,7 @@ elsif(lc($ARGV[0]) eq "library" ){
  say "Ollama library models: " . scalar(keys %$ohLibrary);
  mksepc($dHues{clrgr});
  my $iCols=0;
- my @sorted_keys = sort { length($a) <=> length($b) } keys %$ohLibrary;
+ my @sorted_keys = sort { length($a) <=> length($b) } keys %$ohLibrary; ## order name strings by length for layout
  my $maxlen=length($sorted_keys[-1])+4; ###<<<=== ensure value of 1 at least  
  my $firstchar="a";
  for my $ky (sort keys %$ohLibrary){
@@ -292,12 +300,12 @@ elsif(lc($ARGV[0]) eq "library" ){
     while ( my ($widx,$LCval)=each @aLocs) { 
       if($LCval < $mpos){ next; } 
       elsif($LCval==$mpos){ $bCheckNext=1; next; }
-      elsif($bCheckNext==1 && $dlocModelwords{$LCval} eq "cloud"){ $bIsCM=1; last; }
+      elsif($bCheckNext==1 && $dlocModelwords{$LCval} eq "cloud"){ $bIsCM=1; $dLUTbIsCloud{$ky}=$dLogic{true}; last; }
       else{ last; }
     }
     my $currchar1=substr($ky, 0, 1);
     if($currchar1 ne $firstchar){ 
-      say "\n-----";
+      say "\n$dHues{clryw}-----$dHues{clr0}";
       $firstchar=$currchar1; ### add alphbetical separator 
       $iCols=0;
     } elsif($iCols>3){ $iCols=0; print "\n"; }
@@ -307,11 +315,18 @@ elsif(lc($ARGV[0]) eq "library" ){
     $iCols++; 
 
  }
- say "\n"; 
+
+ ### Most recent LLMs #https://ollama.com/library?sort=newest
+ ### Show the five latest models
+ my $limit=5; 
+ say "\n";
+ mksepc($dHues{clrgr});
+ say "Most recently updated models in library: ". mkbracketed( join(" ;; ", map { $dLUTbIsCloud{$_}==$dLogic{true}?"$dHues{clrcyn}$_$dHues{clr0}":$_ } (keys %$ohLibrary )[0..$limit] ) );
+
  mkmsgc( "$dHues{clrcyn}colour$dHues{clr0} indicates \"cloud model\" , not \"local-only\".\nRead more at: < https://ollama.com/library >." , $dHues{clrcyn}); 
  doDoneMsg();
 }
-elsif(lc($ARGV[0]) eq "pull" && scalar(@ARGV)==2 ){
+elsif(lc($ARGV[0]) eq "pull" && scalar(@ARGV)==2 ){ ##################################################### PULL
  say "Pulling $ARGV[1] ...";
 
     my $jsdata = encode_json( { model => $ARGV[1] , stream => JSON::PP->false }); 
@@ -335,7 +350,7 @@ elsif(lc($ARGV[0]) eq "pull" && scalar(@ARGV)==2 ){
  doDoneMsg();
 }
 
-elsif(lc($ARGV[0]) eq "delete" && scalar(@ARGV)==2 ){ 
+elsif(lc($ARGV[0]) eq "delete" && scalar(@ARGV)==2 ){ ##################################################### DELETE
  say "Sending request to delete \"$ARGV[1]\" ... "; 
 
     my $jsdata = encode_json( { model => $ARGV[1] }); 
@@ -358,7 +373,7 @@ elsif(lc($ARGV[0]) eq "delete" && scalar(@ARGV)==2 ){
 }
 
 elsif(scalar(@ARGV)==2){
-  if( lc($ARGV[0]) eq "all"){
+  if( lc($ARGV[0]) eq "all"){ ##################################################### QUERY ALL
     my $hLUTmdl=$dAppState{hrfLUTModels};
     mkmsgc( "Sending the query to ALL available models..." , $dHues{clrblu});
     for my $val (keys %$hLUTmdl){ if(numtest($val)){ my %dParms=( modelint => $val, question => $ARGV[1] , arg1type => $dLogic{tint} ); sendLLMreq(\%dParms); }} 
