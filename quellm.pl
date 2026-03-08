@@ -37,7 +37,7 @@ my %dAppState=( bHasValidEndpoint => $dLogic{false} , apiserver => $dLogic{null}
   bconfig_useabsdir => $dLogic{false}  , tstt => time , tend => -1
 );
 my %dAppStrs=( bAppendQueryRules => $dLogic{true} , 
-  queryRules => "(Be concise. Include a complete list of authoritative references.)" 
+  queryRules => [ "(Instructions:" , "Be concise." , "Include a complete list of authoritative references.)" ]
 ); 
 # colours
 my %dHues=( clrgr=>GREEN , clryw=>YELLOW, clrrd=>RED, clrblu=>BLUE, clrmgn=>MAGENTA, clrcyn=>CYAN, stybld=>BOLD, clr0=>RESET );
@@ -65,8 +65,9 @@ sub sendLLMreq {
   say Dumper($hrf); 
   my $inQuery=$hrf->{question};
   if ($dAppStrs{bAppendQueryRules} == 1 ){ 
-    say "Adding rules to the query: \"". $dAppStrs{queryRules} . "\"";
-    $inQuery=$inQuery ." ". $dAppStrs{queryRules};
+	my $sAllRules=join(" ", @{$dAppStrs{queryRules}} );
+    say "Adding rules to the query: \"". $sAllRules . "\"";
+    $inQuery=$inQuery ." ". $sAllRules;
   }
   if( $hrf->{arg1type} eq $dLogic{tcsvint}  ){
     my @aModelInts=split(',', $hrf->{modelint});
@@ -221,10 +222,19 @@ if( $dAppState{bconfig_found} ){
   my $pathConfFile=$dataFileNym;
   $pathConfFile = $dAppState{parpath}."/".$dataFileNym if $dAppState{bconfig_useabsdir}==$dLogic{true};
 
-   my $hrfcfg = $oConf->read($pathConfFile);
-   $dAppState{apiserver}=$hrfcfg->{Server}->{URL};
-   $dAppState{bAppendQueryRules} = $hrfcfg->{Logic}->{bAppendQueryRules}; 
-   
+  my $hrfcfg = $oConf->read( $pathConfFile , 'utf8' ); 
+  $dAppState{apiserver}=$hrfcfg->{Server}->{URL};
+  $dAppState{bAppendQueryRules} = $hrfcfg->{Logic}->{bAppendQueryRules}; 
+   #read all rules
+  $dAppState{RulesInts}=$hrfcfg->{Logic}->{RulesToUse};
+  my @aQRules=();
+  for my $nRL ( split(/,/,$dAppState{RulesInts}) ) {
+	push @aQRules, $hrfcfg->{QueryRules}->{ "QRule_". ($nRL) };
+  }
+  if(scalar(@aQRules)>0){
+	mkmsg( "Found rules in configuration file, using ruleset [" . $dAppState{RulesInts} . "]:\n" .  join(" ", @aQRules)  );    
+	$dAppState{queryRules}=\@aQRules;
+  } 
 
 }
 elsif( ! $dAppState{bconfig_found} ){ ### create a config file 
@@ -240,7 +250,12 @@ elsif( ! $dAppState{bconfig_found} ){ ### create a config file
 
 
    $oConf->{Server} = { "URL" => $EPtest }; 
-   $oConf->{Logic} = { "bAppendQueryRules" => 1 }; 
+   my $arfQRules=$dAppStrs{queryRules};
+   $oConf->{Logic} = { "bAppendQueryRules" => 1 , "RulesToUse" => join(",", map { $_ } 1 .. scalar(@$arfQRules) ) };
+   
+   for my $nRL (0 .. $#$arfQRules ) {
+	$oConf->{QueryRules}->{ "QRule_". ($nRL+1) } = $arfQRules->[$nRL] ;
+   }
    
    $oConf->write($dataFileNym); 
    $dAppState{apiserver}=$EPtest;   
@@ -331,8 +346,9 @@ elsif(lc($ARGV[0]) eq "pull" && scalar(@ARGV)==2 ){ ############################
 
     my $jsdata = encode_json( { model => $ARGV[1] , stream => JSON::PP->false }); 
     mksepc($dHues{clryw});
-    say "Sending pull request for \"$ARGV[1]\" ... (download speed depends on Internet connexion and the size of the LLM)";
-
+    my $TMOTVAL=300; ###<<<=== seconds
+    say "Sending pull request for \"$ARGV[1]\" ... (timeout value set to $TMOTVAL ; download speed depends on Internet connexion and the size of the LLM)";
+	$dAppState{ua}->timeout($TMOTVAL);
     my $rv = $dAppState{ua}->post(
         $dAppState{apiserver} . $dAPI{pull},
         'Content-Type' => 'application/json',
